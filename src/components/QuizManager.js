@@ -1,4 +1,3 @@
-// src/components/QuizManager.js
 import React, { useState, useEffect, useRef } from 'react';
 import './QuizManager.css';
 
@@ -7,13 +6,17 @@ const QuizManager = () => {
     const saved = localStorage.getItem('quizQuestions');
     return saved ? JSON.parse(saved) : [];
   });
+  const [currentQuestion, setCurrentQuestion] = useState('');
+  const [options, setOptions] = useState(['', '', '']); // domyślnie 3 opcje
+  const [correctAnswer, setCorrectAnswer] = useState(0);
+  const [explanation, setExplanation] = useState('');
   const [isQuizMode, setIsQuizMode] = useState(false);
   const [currentScore, setCurrentScore] = useState(0);
   const [answeredQuestions, setAnsweredQuestions] = useState(new Set());
   const [importError, setImportError] = useState('');
   const [showJsonInput, setShowJsonInput] = useState(false);
   const [jsonInput, setJsonInput] = useState('');
-  
+
   const fileInputRef = useRef();
 
   useEffect(() => {
@@ -26,14 +29,14 @@ const QuizManager = () => {
       if (!Array.isArray(imported)) {
         throw new Error('Dane muszą zawierać tablicę pytań');
       }
-      
-      const isValid = imported.every(q => 
-        q.question && 
-        Array.isArray(q.options) && 
-        q.options.length === 3 &&
-        typeof q.correct === 'number' && 
-        q.correct >= 0 && 
-        q.correct < 3 &&
+
+      const isValid = imported.every(q =>
+        q.question &&
+        Array.isArray(q.options) &&
+        (q.options.length >= 2 && q.options.length <= 6) && // Pozwalamy na elastyczną liczbę opcji
+        typeof q.correct === 'number' &&
+        q.correct >= 0 &&
+        q.correct < q.options.length &&
         q.explanation
       );
 
@@ -79,6 +82,41 @@ const QuizManager = () => {
     URL.revokeObjectURL(url);
   };
 
+  const handleOptionAdd = () => {
+    if (options.length < 6) { // Maksymalnie 6 opcji
+      setOptions([...options, '']);
+    }
+  };
+
+  const handleOptionRemove = (indexToRemove) => {
+    if (options.length > 2) { // Minimum 2 opcje
+      setOptions(options.filter((_, index) => index !== indexToRemove));
+      if (correctAnswer >= options.length - 1) {
+        setCorrectAnswer(0);
+      }
+    }
+  };
+
+  const addQuestion = () => {
+    if (!currentQuestion || options.some(opt => !opt) || !explanation) {
+      alert('Proszę wypełnić wszystkie pola!');
+      return;
+    }
+
+    const newQuestion = {
+      question: currentQuestion,
+      options: options.filter(opt => opt.trim() !== ''), // Usuwa puste opcje
+      correct: correctAnswer,
+      explanation
+    };
+
+    setQuestions([...questions, newQuestion]);
+    setCurrentQuestion('');
+    setOptions(['', '', '']); // Reset do 3 domyślnych opcji
+    setExplanation('');
+    setCorrectAnswer(0);
+  };
+
   const handleAnswer = (questionIndex, selectedIndex, optionsDiv) => {
     if (answeredQuestions.has(questionIndex)) return;
 
@@ -86,26 +124,9 @@ const QuizManager = () => {
     newAnswered.add(questionIndex);
     setAnsweredQuestions(newAnswered);
 
-    const question = questions[questionIndex];
-    const feedback = optionsDiv.parentNode.querySelector('.feedback');
-    const explanation = optionsDiv.parentNode.querySelector('.explanation');
-    const options = optionsDiv.querySelectorAll('.option');
-    
-    options.forEach(opt => opt.classList.remove('selected'));
-    options[selectedIndex].classList.add('selected');
-
-    if (selectedIndex === question.correct) {
+    if (selectedIndex === questions[questionIndex].correct) {
       setCurrentScore(score => score + 1);
-      feedback.textContent = 'Prawidłowa odpowiedź!';
-      feedback.className = 'feedback correct';
-    } else {
-      feedback.textContent = `Nieprawidłowa odpowiedź. Prawidłowa odpowiedź to: ${String.fromCharCode(97 + question.correct)}) ${question.options[question.correct]}`;
-      feedback.className = 'feedback incorrect';
     }
-    
-    feedback.style.display = 'block';
-    explanation.style.display = 'block';
-    explanation.textContent = `Wyjaśnienie: ${question.explanation}`;
   };
 
   const resetQuiz = () => {
@@ -117,7 +138,7 @@ const QuizManager = () => {
     <div className="container">
       <div className="header">
         <div className="button-group">
-          <button 
+          <button
             className="button"
             onClick={() => {
               setIsQuizMode(!isQuizMode);
@@ -171,14 +192,7 @@ const QuizManager = () => {
             className="json-input"
             value={jsonInput}
             onChange={(e) => setJsonInput(e.target.value)}
-            placeholder='[
-  {
-    "question": "Treść pytania",
-    "options": ["Odpowiedź A", "Odpowiedź B", "Odpowiedź C"],
-    "correct": 0,
-    "explanation": "Wyjaśnienie odpowiedzi"
-  }
-]'
+            placeholder='[{"question": "Treść pytania","options": ["Odpowiedź A", "Odpowiedź B", "Odpowiedź C"],"correct": 0,"explanation": "Wyjaśnienie odpowiedzi"}]'
           />
           <button className="button" onClick={handleJsonImport}>
             Importuj z JSON
@@ -189,50 +203,112 @@ const QuizManager = () => {
         </div>
       )}
 
-      {isQuizMode ? (
-        <div className="quiz-container">
+      {!isQuizMode ? (
+        <div className="question-form">
+          <textarea
+            value={currentQuestion}
+            onChange={(e) => setCurrentQuestion(e.target.value)}
+            placeholder="Wpisz pytanie"
+            className="input"
+          />
+
+          <div className="options-list">
+            {options.map((option, index) => (
+              <div key={index} className="option-input-group">
+                <input
+                  type="text"
+                  value={option}
+                  onChange={(e) => {
+                    const newOptions = [...options];
+                    newOptions[index] = e.target.value;
+                    setOptions(newOptions);
+                  }}
+                  placeholder={`Odpowiedź ${String.fromCharCode(65 + index)}`}
+                  className="input"
+                />
+                {options.length > 2 && (
+                  <button
+                    className="button remove-option"
+                    onClick={() => handleOptionRemove(index)}
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            ))}
+            {options.length < 6 && (
+              <button
+                className="button add-option"
+                onClick={handleOptionAdd}
+              >
+                Dodaj opcję
+              </button>
+            )}
+          </div>
+
+          <div className="correct-answer">
+            <label>Poprawna odpowiedź:</label>
+            <select
+              value={correctAnswer}
+              onChange={(e) => setCorrectAnswer(Number(e.target.value))}
+              className="select"
+            >
+              {options.map((_, index) => (
+                <option key={index} value={index}>
+                  {String.fromCharCode(65 + index)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <textarea
+            value={explanation}
+            onChange={(e) => setExplanation(e.target.value)}
+            placeholder="Wpisz wyjaśnienie"
+            className="input"
+          />
+
+          <button onClick={addQuestion} className="button">
+            Dodaj pytanie
+          </button>
+        </div>
+      ) : (
+        <div className="quiz-mode">
           <div className="score">
             Wynik: {currentScore} / {questions.length}
           </div>
           {questions.map((q, qIndex) => (
             <div key={qIndex} className="question">
               <div className="question-text">
-                <strong>{qIndex + 1}. </strong>
-                {q.question}
+                {qIndex + 1}. {q.question}
               </div>
               <div className="options">
                 {q.options.map((option, optIndex) => (
                   <div
                     key={optIndex}
-                    className="option"
-                    onClick={(e) => handleAnswer(qIndex, optIndex, e.target.parentNode)}
+                    className={`option ${answeredQuestions.has(qIndex)
+                        ? optIndex === q.correct
+                          ? 'correct'
+                          : 'incorrect'
+                        : ''
+                      }`}
+                    onClick={() => {
+                      if (!answeredQuestions.has(qIndex)) {
+                        handleAnswer(qIndex, optIndex);
+                      }
+                    }}
                   >
-                    {String.fromCharCode(97 + optIndex)}) {option}
+                    {String.fromCharCode(65 + optIndex)}) {option}
                   </div>
                 ))}
               </div>
-              <div className="feedback"></div>
-              <div className="explanation"></div>
+              {answeredQuestions.has(qIndex) && (
+                <div className="explanation">
+                  {q.explanation}
+                </div>
+              )}
             </div>
           ))}
-        </div>
-      ) : (
-        <div className="question">
-          <h3>Przykładowy format JSON:</h3>
-          <pre className="json-example">
-{`[
-  {
-    "question": "Treść pytania",
-    "options": [
-      "Odpowiedź A",
-      "Odpowiedź B",
-      "Odpowiedź C"
-    ],
-    "correct": 0,
-    "explanation": "Wyjaśnienie odpowiedzi"
-  }
-]`}
-          </pre>
         </div>
       )}
     </div>
