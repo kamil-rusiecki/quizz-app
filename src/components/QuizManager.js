@@ -7,7 +7,7 @@ const QuizManager = () => {
     return saved ? JSON.parse(saved) : [];
   });
   const [currentQuestion, setCurrentQuestion] = useState('');
-  const [options, setOptions] = useState(['', '', '']); // domyślnie 3 opcje
+  const [options, setOptions] = useState(['', '', '']);
   const [correctAnswer, setCorrectAnswer] = useState(0);
   const [explanation, setExplanation] = useState('');
   const [isQuizMode, setIsQuizMode] = useState(false);
@@ -26,29 +26,40 @@ const QuizManager = () => {
   const validateAndImportQuestions = (questionsToImport) => {
     try {
       const imported = Array.isArray(questionsToImport) ? questionsToImport : JSON.parse(questionsToImport);
+      console.log('Importowane pytania:', imported);
+
       if (!Array.isArray(imported)) {
         throw new Error('Dane muszą zawierać tablicę pytań');
       }
 
-      const isValid = imported.every(q =>
-        q.question &&
-        Array.isArray(q.options) &&
-        (q.options.length >= 2 && q.options.length <= 6) && // Pozwalamy na elastyczną liczbę opcji
-        typeof q.correct === 'number' &&
-        q.correct >= 0 &&
-        q.correct < q.options.length &&
-        q.explanation
-      );
-
-      if (!isValid) {
-        throw new Error('Nieprawidłowa struktura pytań');
-      }
+      imported.forEach((q, index) => {
+        console.log(`Sprawdzanie pytania ${index + 1}:`, q);
+        if (!q.question) {
+          throw new Error(`Pytanie ${index + 1} nie ma treści`);
+        }
+        if (!Array.isArray(q.options)) {
+          throw new Error(`Pytanie ${index + 1} nie ma tablicy opcji`);
+        }
+        if (q.options.length < 2 || q.options.length > 6) {
+          throw new Error(`Pytanie ${index + 1} musi mieć od 2 do 6 opcji odpowiedzi`);
+        }
+        if (typeof q.correct !== 'number') {
+          throw new Error(`Pytanie ${index + 1} musi mieć numeryczny indeks poprawnej odpowiedzi`);
+        }
+        if (q.correct < 0 || q.correct >= q.options.length) {
+          throw new Error(`Pytanie ${index + 1} ma nieprawidłowy indeks poprawnej odpowiedzi`);
+        }
+        if (!q.explanation) {
+          throw new Error(`Pytanie ${index + 1} nie ma wyjaśnienia`);
+        }
+      });
 
       setQuestions(prev => [...prev, ...imported]);
       setImportError('');
       setJsonInput('');
       setShowJsonInput(false);
     } catch (error) {
+      console.error('Błąd walidacji:', error);
       setImportError('Błąd podczas importu: ' + error.message);
     }
   };
@@ -83,13 +94,13 @@ const QuizManager = () => {
   };
 
   const handleOptionAdd = () => {
-    if (options.length < 6) { // Maksymalnie 6 opcji
+    if (options.length < 6) {
       setOptions([...options, '']);
     }
   };
 
   const handleOptionRemove = (indexToRemove) => {
-    if (options.length > 2) { // Minimum 2 opcje
+    if (options.length > 2) {
       setOptions(options.filter((_, index) => index !== indexToRemove));
       if (correctAnswer >= options.length - 1) {
         setCorrectAnswer(0);
@@ -105,19 +116,19 @@ const QuizManager = () => {
 
     const newQuestion = {
       question: currentQuestion,
-      options: options.filter(opt => opt.trim() !== ''), // Usuwa puste opcje
+      options: options.filter(opt => opt.trim() !== ''),
       correct: correctAnswer,
       explanation
     };
 
     setQuestions([...questions, newQuestion]);
     setCurrentQuestion('');
-    setOptions(['', '', '']); // Reset do 3 domyślnych opcji
+    setOptions(['', '', '']);
     setExplanation('');
     setCorrectAnswer(0);
   };
 
-  const handleAnswer = (questionIndex, selectedIndex, optionsDiv) => {
+  const handleAnswer = (questionIndex, selectedIndex) => {
     if (answeredQuestions.has(questionIndex)) return;
 
     const newAnswered = new Set(answeredQuestions);
@@ -289,7 +300,9 @@ const QuizManager = () => {
                     className={`option ${answeredQuestions.has(qIndex)
                         ? optIndex === q.correct
                           ? 'correct'
-                          : 'incorrect'
+                          : optIndex === q.correct
+                            ? 'correct'
+                            : 'incorrect'
                         : ''
                       }`}
                     onClick={() => {
